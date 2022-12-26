@@ -367,6 +367,7 @@ function UploadFile({ uploadedFile, setUploadedFile, setValue }: UploadFile) {
       onDrop={(acceptedFiles, rejectedFiles) => {
         // handle file upload...
         console.log(acceptedFiles);
+        // set uploaded file
         if (!!acceptedFiles) {
           setUploadedFile(acceptedFiles);
         }
