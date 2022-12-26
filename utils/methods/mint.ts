@@ -2,6 +2,7 @@ import { create } from 'ipfs-http-client';
 import { Web3Storage } from 'web3.storage';
 import type { MGDAbi } from '../../types/ethers-contracts';
 import axios from 'axios';
+import { BigNumber, ethers } from 'ethers';
 
 // Initialize IPFS
 const INFURA_ID = process.env.NEXT_PUBLIC_INFURA_ID ?? '';
@@ -44,7 +45,7 @@ export const mint = async (
     // save metadata to ipfs
     const added = await client.add(_data);
     // IPFS url for uploaded metadata - https://infura-ipfs.io/ipfs/
-    const metadataUri = `https://infura-ipfs.io/ipfs/${added.path}`;
+    const metadataUri = `https://saii.infura-ipfs.io/ipfs/${added.path}`;
 
     await contract.mint(
       'MGD',
@@ -63,7 +64,7 @@ export const mint = async (
 
 /** returns an IPFS gateway URL for the given CID and path */
 export const makeGatewayURL = (cid: string, path: string) => {
-  return `https://${cid}.ipfs.dweb.link/${encodeURIComponent(path)}`;
+  return `https://${cid}.ipfs.w3s.link/${encodeURIComponent(path)}`;
 };
 
 /** @dev uploads a file to IPFS via web3.storage */
@@ -83,6 +84,7 @@ export const uploadFileToWebStorage = async (file: File[]) => {
       `Error ${typeof uploadFileToWebStorage} uploadFileToWebStorage: No file provided`
     );
   // Pack files into a CAR and send to web3.storage
+  console.log('Uploading file to web3Storage...');
   const cid = await client.put(file); // Promise<CIDString>
   console.log('Content added with CID: ', cid);
 
@@ -135,6 +137,7 @@ export const fetchNftMeta = async (ipfsUrl: string) => {
       throw new Error('No ipfs url provided');
     }
     const meta = await axios.get(ipfsUrl);
+
     return meta;
   } catch (error) {
     console.error(`Error ${typeof fetchNftMeta} fetchNftMeta: `, error);
@@ -151,8 +154,9 @@ export interface Artwork {
 export const getMintedArtworks = async (contract: MGDAbi) => {
   try {
     const artworks: Array<Artwork> = [];
-    const artworksLength = await contract.tokenCount;
-    for (let i = 1; i < Number(artworksLength); i++) {
+    const _artworksLength = (await contract.tokenCount())._hex;
+    const artworksLength = parseInt(_artworksLength);
+    for (let i = 1; i < artworksLength + 1; i++) {
       const artwork = new Promise<Artwork>(async (resolve) => {
         const res = await contract.metadata(i);
         const meta = await fetchNftMeta(res[0]);

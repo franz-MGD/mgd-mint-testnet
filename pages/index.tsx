@@ -36,6 +36,7 @@ import {
 import { useMGDContract } from '../hooks/useContract';
 import { Card, StyledBody } from 'baseui/card';
 import { DisplayMedium } from 'baseui/typography';
+import { useRouter } from 'next/router';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -47,42 +48,39 @@ interface MintDetails {
 
 export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<Array<File>>([]);
   const [value, setValue] = useState<MintDetails>({
     image: '',
     name: '',
     description: '',
   });
   const [artworks, setArtworks] = useState<Array<Artwork>>([]);
+  const [loading, setLoading] = useState(false);
 
   const MGDContract = useMGDContract();
+  const router = useRouter();
 
   const [css] = useStyletron();
 
   const _mint = async () => {
-    let provider;
     try {
-      if (typeof window.ethereum !== 'undefined') {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
+      if (typeof window !== 'undefined') {
+        const { ethereum } = window;
+        const provider = new ethers.providers.Web3Provider(ethereum);
+        await provider.send('eth_requestAccounts', []);
+        const signer = provider.getSigner();
+        const account = await signer.getAddress();
+        if (!!account) {
+          setLoading(true);
+          await mint(MGDContract, account, value as MintArtwork).then(() => {
+            setLoading(false);
+            router.reload();
+          });
+        } else {
+          console.error('Please connect to MetaMask, no account detected');
+        }
       } else {
         // eslint-disable-next-line quotes
         console.error("You don't have a metaMask installed");
-      }
-      // MetaMask requires requesting permission to connect users accounts
-      await provider?.send('eth_requestAccounts', []);
-      const signer = provider?.getSigner();
-      // signer?.sendTransaction({
-      //   to: '0x505F10f15aB5040c07A404aA8C45Be6484Ba97F4',
-      //   value: ethers.utils.parseEther('0.001'),
-      // });
-      console.log(value);
-      let currentAccount;
-      await signer
-        ?.getAddress()
-        .then((res) => (currentAccount = res))
-        .catch((error) => console.error('Error getting address: ', error));
-      if (!!currentAccount) {
-        await mint(await MGDContract, currentAccount, value as MintArtwork);
       }
     } catch (error: any) {
       if (error.code === 4001) {
@@ -95,33 +93,38 @@ export default function Home() {
   };
 
   const getArtworks = useCallback(async () => {
-    let provider;
     try {
-      if (typeof window.ethereum !== 'undefined') {
-        provider = new ethers.providers.Web3Provider(window.ethereum);
+      if (typeof window !== 'undefined') {
+        const { ethereum } = window;
+        const provider = new ethers.providers.Web3Provider(ethereum);
+        // MetaMask requires requesting permission to connect users accounts
+        await provider.send('eth_requestAccounts', []);
+        const signer = provider.getSigner();
+        const account = await signer.getAddress();
+        if (!!account) {
+          const allArtworks = await getMintedArtworks(MGDContract);
+          if (!allArtworks) console.error('Failed to get minted artworks');
+          setArtworks(allArtworks ?? []);
+        } else {
+          console.error('Please connect to MetaMask, no account detected');
+        }
       } else {
         // eslint-disable-next-line quotes
         console.error("You don't have a metaMask installed");
       }
-      // MetaMask requires requesting permission to connect users accounts
-      await provider?.send('eth_requestAccounts', []);
-      const signer = provider?.getSigner();
-      const account = await signer?.getAddress();
-      if (!!account) {
-        const allArtworks = await getMintedArtworks(await MGDContract);
-        if (!allArtworks) console.error('Failed to get minted artworks');
-        setArtworks(allArtworks ?? []);
+    } catch (error: any) {
+      if (error.code === 4001) {
+        console.error('Please connect to MetaMask');
       } else {
-        console.error('Please connect to MetaMask, no account detected');
+        // eslint-disable-next-line quotes
+        console.error("Couldn't connect wallet: ", error);
       }
-    } catch (error) {
-      console.error(error);
     }
   }, [MGDContract]);
 
   useEffect(() => {
     getArtworks();
-  }, [getArtworks]);
+  }, []);
 
   return (
     <>
@@ -150,11 +153,10 @@ export default function Home() {
               <MintDetailsModal
                 isOpen={isOpen}
                 setIsOpen={setIsOpen}
-                uploadedFile={uploadedFile}
-                setUploadedFile={setUploadedFile}
                 value={value}
                 setValue={setValue}
                 _mint={_mint}
+                loading={loading}
               />
               <Box>
                 {artworks.length > 0 ? (
@@ -164,6 +166,13 @@ export default function Home() {
                       overrides={{
                         Root: {
                           style: { width: '100%', marginBottom: '.5rem' },
+                        },
+                        HeaderImage: {
+                          style: {
+                            height: '25rem',
+                            width: '100%',
+                            objectFit: 'cover',
+                          },
                         },
                       }}
                       headerImage={artwork.image}
@@ -218,6 +227,7 @@ function Box({ children }: { children: ReactNode }) {
     <div
       className={css({
         marginTop: '2.5rem',
+        width: '100%',
       })}
     >
       {children}
@@ -228,21 +238,19 @@ function Box({ children }: { children: ReactNode }) {
 type MintDetailsModalProps = {
   isOpen: boolean;
   setIsOpen: (value: SetStateAction<boolean>) => void;
-  uploadedFile: File[] | undefined;
-  setUploadedFile: Dispatch<SetStateAction<File[]>>;
   value: MintDetails | undefined;
   setValue: Dispatch<SetStateAction<MintDetails>>;
   _mint: () => Promise<void>;
+  loading: boolean;
 };
 
 function MintDetailsModal({
   isOpen,
   setIsOpen,
-  uploadedFile,
-  setUploadedFile,
   value,
   setValue,
   _mint,
+  loading,
 }: MintDetailsModalProps) {
   return (
     <Modal
@@ -262,11 +270,7 @@ function MintDetailsModal({
             'File types supported: JPG, PNG, GIF, SVG, MP4, WEBM, MP3, WAV, OGG, GLB, GLTF. Max size: 100 MB'
           }
         >
-          <UploadFile
-            uploadedFile={uploadedFile}
-            setUploadedFile={setUploadedFile}
-            setValue={setValue}
-          />
+          <UploadFile setValue={setValue} />
         </FormControl>
         <FormControl label={() => 'Name'}>
           <Input
@@ -302,7 +306,13 @@ function MintDetailsModal({
         >
           Cancel
         </ModalButton>
-        <ModalButton onClick={() => _mint()}>Mint</ModalButton>
+        <ModalButton
+          disabled={!value?.image}
+          isLoading={!value?.image || loading}
+          onClick={() => _mint()}
+        >
+          Mint
+        </ModalButton>
       </ModalFooter>
     </Modal>
   );
@@ -353,29 +363,22 @@ function useFakeProgress(): [number, () => void, () => void] {
 }
 
 type UploadFile = {
-  uploadedFile: File[] | undefined;
-  setUploadedFile: Dispatch<SetStateAction<File[]>>;
   setValue: Dispatch<SetStateAction<MintDetails>>;
 };
 
-function UploadFile({ uploadedFile, setUploadedFile, setValue }: UploadFile) {
+function UploadFile({ setValue }: UploadFile) {
   const [progressAmount, startFakeProgress, stopFakeProgress] =
     useFakeProgress();
   return (
     <FileUploader
       onCancel={stopFakeProgress}
-      onDrop={(acceptedFiles, rejectedFiles) => {
+      onDrop={async (acceptedFiles, rejectedFiles) => {
         // handle file upload...
         console.log(acceptedFiles);
-        // set uploaded file
-        if (!!acceptedFiles) {
-          setUploadedFile(acceptedFiles);
-        }
-        console.log(uploadedFile);
         // upload to web3Storage
-        uploadedFile &&
-          uploadedFile.length > 0 &&
-          uploadFileToWebStorage(uploadedFile)
+        acceptedFiles &&
+          acceptedFiles.length > 0 &&
+          uploadFileToWebStorage(acceptedFiles)
             .then((res) =>
               setValue((prevState) => ({ ...prevState, image: res }))
             )
