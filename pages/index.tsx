@@ -123,8 +123,14 @@ export default function Home() {
   }, [MGDContract]);
 
   useEffect(() => {
-    getArtworks();
+   getArtworksAsync();
   }, []);
+
+  async function getArtworksAsync() {
+    const allArtworks = await getMintedArtworks(MGDContract);
+          if (!allArtworks) console.error('Failed to get minted artworks');
+          setArtworks(allArtworks ?? []);
+  }
 
   return (
     <>
