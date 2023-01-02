@@ -8,7 +8,6 @@ import {
   SetStateAction,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from 'react';
 import { Button, KIND as ButtonKind } from 'baseui/button';
@@ -344,23 +343,8 @@ type UploadFile = {
 };
 
 function UploadFile({ setValue }: UploadFile) {
-  const [isUploading, setIsUploading] = useState(false);
-  const timeoutId = useRef<any>();
-
-  function reset() {
-    setIsUploading(false);
-    clearTimeout(timeoutId.current);
-  }
-  // startProgress is only illustrative. Use the progress info returned
-  // from your upload endpoint. This example shows how the file-uploader operates
-  // if there is no progress info available.
-  function startProgress() {
-    setIsUploading(true);
-    timeoutId.current = setTimeout(reset, 6000);
-  }
   return (
     <FileUploader
-      onCancel={reset}
       onDrop={async (acceptedFiles, rejectedFiles) => {
         // handle file upload...
         console.log(acceptedFiles);
@@ -374,9 +358,7 @@ function UploadFile({ setValue }: UploadFile) {
             .catch((error) => console.error('Failed to upload: ', error));
         rejectedFiles.length > 0 &&
           console.error('RejectedFiles: ', rejectedFiles);
-        startProgress();
       }}
-      progressMessage={isUploading ? 'Uploading... hang tight.' : ''}
     />
   );
 }
