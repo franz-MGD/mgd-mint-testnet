@@ -47,7 +47,7 @@ export const mint = async (
     // IPFS url for uploaded metadata - https://infura-ipfs.io/ipfs/
     const metadataUri = `https://saii.infura-ipfs.io/ipfs/${added.path}`;
 
-    await contract.mint(
+    return await contract.mint(
       'MGD',
       metadataUri,
       account,

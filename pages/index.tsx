@@ -71,9 +71,12 @@ export default function Home() {
         const account = await signer.getAddress();
         if (!!account) {
           setLoading(true);
-          await mint(MGDContract, account, value as MintArtwork).then(() => {
+          await mint(MGDContract, account, value as MintArtwork).then((res) => {
             setLoading(false);
-            router.reload();
+            listenForMintTransaction(
+              res as ethers.ContractTransaction,
+              provider
+            );
           });
         } else {
           console.error('Please connect to MetaMask, no account detected');
@@ -90,6 +93,23 @@ export default function Home() {
         console.error("Couldn't connect wallet: ", error);
       }
     }
+  };
+
+  const listenForMintTransaction = (
+    transactionResponse: ethers.ContractTransaction,
+    provider: ethers.providers.Web3Provider
+  ) => {
+    console.log(`Minting ${transactionResponse.hash}`);
+    return new Promise<void>((resolve, reject) => {
+      provider.once(transactionResponse.hash, (transactionReceipt: any) => {
+        console.log(transactionResponse);
+        console.log(
+          `completed with ${transactionReceipt.confirmation} confirmations`
+        );
+        resolve();
+        router.reload();
+      });
+    });
   };
 
   const getArtworks = useCallback(async () => {
@@ -214,8 +234,6 @@ function Inner({ children }: { children: ReactNode }) {
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        // background: theme.colors.accent200,
-        // color: theme.colors.accent700,
         padding: '.25rem 20rem .25rem 20rem',
       })}
     >
@@ -270,7 +288,7 @@ function MintDetailsModal({
         <FormControl
           label={() => 'Image, Video, Audio, or 3D Model'}
           caption={() =>
-            'File types supported: JPG, PNG, GIF, SVG, MP4, WEBM, MP3, WAV, OGG, GLB, GLTF. Max size: 100 MB'
+            'File types supported: JPG, PNG, GIF, SVG, MP4, WEBM, MP3, WAV, OGG, GLB, GLTF.'
           }
         >
           <UploadFile setValue={setValue} />
@@ -321,60 +339,28 @@ function MintDetailsModal({
   );
 }
 
-// https://overreacted.io/making-setinterval-declarative-with-react-hooks/
-function useInterval(callback: any, delay: number | null) {
-  const savedCallback = useRef(() => {});
-  // Remember the latest callback.
-  useEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
-  // Set up the interval.
-  useEffect((): any => {
-    function tick() {
-      savedCallback.current();
-    }
-    if (delay !== null) {
-      let id = setInterval(tick, delay);
-      return () => clearInterval(id);
-    }
-  }, [delay]);
-}
-// useFakeProgress is an elaborate way to show a fake file transfer for illustrative purposes. You
-// don't need this is your application. Use metadata from your upload destination if it's available,
-// or don't provide progress.
-function useFakeProgress(): [number, () => void, () => void] {
-  const [fakeProgress, setFakeProgress] = useState(0);
-  const [isActive, setIsActive] = useState(false);
-  function stopFakeProgress() {
-    setIsActive(false);
-    setFakeProgress(0);
-  }
-  function startFakeProgress() {
-    setIsActive(true);
-  }
-  useInterval(
-    () => {
-      if (fakeProgress >= 100) {
-        stopFakeProgress();
-      } else {
-        setFakeProgress(fakeProgress + 10);
-      }
-    },
-    isActive ? 500 : null
-  );
-  return [fakeProgress, startFakeProgress, stopFakeProgress];
-}
-
 type UploadFile = {
   setValue: Dispatch<SetStateAction<MintDetails>>;
 };
 
 function UploadFile({ setValue }: UploadFile) {
-  const [progressAmount, startFakeProgress, stopFakeProgress] =
-    useFakeProgress();
+  const [isUploading, setIsUploading] = useState(false);
+  const timeoutId = useRef<any>();
+
+  function reset() {
+    setIsUploading(false);
+    clearTimeout(timeoutId.current);
+  }
+  // startProgress is only illustrative. Use the progress info returned
+  // from your upload endpoint. This example shows how the file-uploader operates
+  // if there is no progress info available.
+  function startProgress() {
+    setIsUploading(true);
+    timeoutId.current = setTimeout(reset, 6000);
+  }
   return (
     <FileUploader
-      onCancel={stopFakeProgress}
+      onCancel={reset}
       onDrop={async (acceptedFiles, rejectedFiles) => {
         // handle file upload...
         console.log(acceptedFiles);
@@ -388,13 +374,9 @@ function UploadFile({ setValue }: UploadFile) {
             .catch((error) => console.error('Failed to upload: ', error));
         rejectedFiles.length > 0 &&
           console.error('RejectedFiles: ', rejectedFiles);
-        startFakeProgress();
+        startProgress();
       }}
-      // progressAmount is a number from 0 - 100 which indicates the percent of file transfer completed
-      progressAmount={progressAmount}
-      progressMessage={
-        progressAmount ? `Uploading... ${progressAmount}% of 100%` : ''
-      }
+      progressMessage={isUploading ? 'Uploading... hang tight.' : ''}
     />
   );
 }
